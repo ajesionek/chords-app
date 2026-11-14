@@ -1,6 +1,6 @@
 // Service worker: aplikacja działa offline (wyszukiwarka wymaga internetu).
-const CACHE = 'akordy-v2';
-const SHELL = ['./', './index.html', './style.css', './app.js', './chords.js', './chordpro.js', './songs-pd.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
+const CACHE = 'akordy-v3';
+const SHELL = ['./', './index.html', './style.css', './app.js', './chords.js', './chordpro.js', './songs-pd.js', './cn.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -1,6 +1,7 @@
 import { parseChord, chordName, transposeChord, guitarSVG, pianoSVG, setPolishInput } from './chords.js';
 import { parseChordPro, chordsIn, chordsOverLyricsToChordPro } from './chordpro.js';
 import { PD_SONGS, PD_SOURCES } from './songs-pd.js';
+import { spotifyArtistId, artistSongs, resolveTitles, baseTitle, toChordPro } from './cn.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const view = $('#view');
@@ -152,17 +153,19 @@ function recordingList(recs, q) {
     if (seen.has(key)) continue;
     seen.add(key);
     const rel = (r.releases || []).find((x) => x['release-group']?.['primary-type'] === 'Album') || (r.releases || [])[0];
-    items.push({ title: r.title, artist, album: rel?.title || '' });
+    items.push({ title: r.title, artist, album: rel?.title || '', aid: r['artist-credit']?.[0]?.artist?.id || '' });
   }
   if (!items.length) return noResults(q);
-  return `<ul class="list">${items.map((s) => `<li><a href="#/song?t=${enc(s.title)}&a=${enc(s.artist)}&al=${enc(s.album)}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)}${s.album ? ' · ' + esc(s.album) : ''}</span></a></li>`).join('')}</ul>`;
+  return `<ul class="list">${items.map((s) => `<li><a href="#/song?t=${enc(s.title)}&a=${enc(s.artist)}&al=${enc(s.album)}&aid=${enc(s.aid)}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)}${s.album ? ' · ' + esc(s.album) : ''}</span></a></li>`).join('')}</ul>`;
 }
 
 route(/^\/artist\/([\w-]+)$/, async (p, id) => {
   const name = p.get('n') || '';
   view.innerHTML = `<a class="back" href="javascript:history.back()">← Wróć</a><h1>${esc(name)}</h1>
+    <h2>Akordy w bazie</h2><div id="cnSongs"><p class="muted loading">Szukam akordów</p></div>
     <h2>Albumy</h2><div id="albums"><p class="muted loading">Ładuję…</p></div>
     <h2>Piosenki</h2><div id="songs"><p class="muted loading">Ładuję…</p></div>`;
+  cnArtistList(id, name);
   try {
     const d = await mb(`release-group?artist=${id}&type=album|ep&limit=100`);
     const rgs = (d['release-groups'] || []).filter((r) => !(r['secondary-types'] || []).length)
@@ -187,7 +190,8 @@ route(/^\/album\/([\w-]+)$/, async (p, id) => {
     $('#album').innerHTML = `<h1>${esc(rel.title)}</h1><p class="muted">${esc(artist)}${rel.date ? ' · ' + esc(rel.date.slice(0, 4)) : ''}</p>
       <ol class="list tracks">${tracks.map((t) => {
         const a = credit(t['artist-credit']) || artist;
-        return `<li><a href="#/song?t=${enc(t.title)}&a=${enc(a)}&al=${enc(rel.title)}"><strong>${esc(t.title)}</strong>${a !== artist ? `<span class="muted">${esc(a)}</span>` : ''}</a></li>`;
+        const aid = t['artist-credit']?.[0]?.artist?.id || rel['artist-credit']?.[0]?.artist?.id || '';
+        return `<li><a href="#/song?t=${enc(t.title)}&a=${enc(a)}&al=${enc(rel.title)}&aid=${enc(aid)}"><strong>${esc(t.title)}</strong>${a !== artist ? `<span class="muted">${esc(a)}</span>` : ''}</a></li>`;
       }).join('')}</ol>`;
   } catch (e) { $('#album').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
 });
@@ -232,10 +236,12 @@ route(/^\/song$/, (p) => {
       ${mine.length || pd.length ? `<ul class="list">${mine.map(libItem).join('')}${pd.map((s) => `<li><a href="#/pd/${s.id}"><strong>${esc(s.title)}</strong><span class="muted">domena publiczna</span></a></li>`).join('')}</ul>` : '<p class="muted">Nie masz jeszcze akordów do tej piosenki. Możesz je wpisać albo wkleić: zostaną tylko na tym urządzeniu.</p>'}
       <a class="btn primary" href="#/edit/new?t=${enc(title)}&a=${enc(artist)}&al=${enc(album)}">＋ Dodaj swoje akordy</a>
     </section>
-    <section><h2>Akordy i taby</h2>${linkList(L.chords)}</section>
+    <section><h2>Akordy z bazy</h2><div id="cnMatch"><p class="muted loading">Szukam w bazie akordów</p></div></section>
+    <section><h2>Akordy i taby w innych serwisach</h2>${linkList(L.chords)}</section>
     <section><h2>Nuty</h2>${linkList(L.sheets)}</section>
     <section><h2>Posłuchaj i naucz się</h2>${linkList(L.listen)}</section>
     <p class="fineprint">Linki prowadzą do zewnętrznych serwisów, które odpowiadają za licencje na swoje treści. Ta aplikacja nie kopiuje tekstów ani akordów chronionych prawem autorskim.</p>`;
+  cnSongMatch(p.get('aid'), title, artist);
   $('#fav').addEventListener('click', (e) => {
     favorites.toggle({ key: favKey, title, artist, album });
     const on = favorites.has(favKey);
@@ -336,6 +342,69 @@ route(/^\/pd$/, () => {
     <section><h2>Biblioteki nut</h2>${linkList(PD_SOURCES.map((s) => ({ name: s.name, desc: s.desc, url: s.url })))}</section>`;
 });
 
+// ---------- Akordy z bazy Chordonomicon ----------
+let lastReadOnly = null;
+async function cnForArtist(mbArtistId) {
+  if (!mbArtistId) return { spotify: null, songs: [] };
+  const spotify = await spotifyArtistId(mbArtistId, mb);
+  return { spotify, songs: await artistSongs(spotify) };
+}
+const cnLink = (spotify, s, artist) => `#/cn/${spotify}/${s.sid}?t=${enc((s.title || '').replace(/\s+[-–]\s+(\d{4}\s+)?(remaster|live|mono|stereo|radio|version|wersja).*$/i, ''))}&a=${enc(artist)}`;
+
+async function cnSongMatch(aid, title, artist) {
+  const box = $('#cnMatch');
+  const none = (msg) => { if (box.isConnected) box.innerHTML = `<p class="muted">${msg}</p>`; };
+  try {
+    const { spotify, songs } = await cnForArtist(aid);
+    if (!songs.length) return none('Tej piosenki nie ma w bazie akordów. Możesz dodać własne akordy powyżej.');
+    const want = baseTitle(title, norm);
+    let found = null;
+    await resolveTitles(songs, (s) => {
+      if (!box.isConnected) return true;
+      if (baseTitle(s.title, norm) === want) { found = s; return true; }
+      return false;
+    });
+    if (!box.isConnected) return;
+    if (found) {
+      box.innerHTML = `<ul class="list"><li><a href="${cnLink(spotify, { ...found, title }, artist)}"><strong>${esc(found.title)}</strong><span class="muted">akordy bez tekstu · Chordonomicon</span></a></li></ul>`;
+    } else {
+      box.innerHTML = `<p class="muted">Tej piosenki nie ma w bazie, ale są inne utwory tego wykonawcy (${songs.length}).</p><a class="btn" href="#/artist/${aid}?n=${enc(artist)}">Zobacz piosenki z akordami</a>`;
+    }
+  } catch (e) { none('Nie udało się sprawdzić bazy akordów.'); }
+}
+
+async function cnArtistList(aid, name) {
+  const box = $('#cnSongs');
+  try {
+    const { spotify, songs } = await cnForArtist(aid);
+    if (!box.isConnected) return;
+    if (!songs.length) { box.innerHTML = '<p class="muted">Brak akordów tego wykonawcy w bazie.</p>'; return; }
+    box.innerHTML = `<p class="muted small">${songs.length} ${songs.length === 1 ? 'piosenka' : 'piosenek'} z akordami (bez tekstów)</p><ul class="list" id="cnList"></ul>`;
+    const list = $('#cnList');
+    const draw = () => {
+      if (!list.isConnected) return true;
+      const ready = songs.filter((s) => s.title).sort((a, b) => a.title.localeCompare(b.title, 'pl'));
+      const seen = new Set();
+      list.innerHTML = ready.filter((s) => { const k = baseTitle(s.title, norm); if (seen.has(k)) return false; seen.add(k); return true; })
+        .map((s) => `<li><a href="${cnLink(spotify, s, name)}"><strong>${esc(s.title)}</strong>${s.year ? `<span class="muted">${s.year}</span>` : ''}</a></li>`).join('')
+        + (ready.length < songs.length ? '<li class="muted small pad">Wczytuję tytuły…</li>' : '');
+      return false;
+    };
+    let pending = 0;
+    await resolveTitles(songs, () => { if (++pending % 6 === 0) return draw(); return !list.isConnected; });
+    draw();
+  } catch { if (box.isConnected) box.innerHTML = '<p class="muted">Nie udało się sprawdzić bazy akordów.</p>'; }
+}
+
+route(/^\/cn\/([A-Za-z0-9]+)\/([A-Za-z0-9]+)$/, async (p, spotify, sid) => {
+  view.innerHTML = '<p class="muted loading">Ładuję akordy</p>';
+  const s = (await artistSongs(spotify)).find((x) => x.sid === sid);
+  if (!s) { view.innerHTML = '<p>Nie znaleziono akordów.</p>'; return; }
+  const song = { id: 'cn-' + sid, title: p.get('t') || '', artist: p.get('a') || '', content: toChordPro(s.chords, { title: p.get('t'), artist: p.get('a'), year: s.year }), src: 'https://open.spotify.com/track/' + sid };
+  lastReadOnly = song;
+  songViewer(song, { readOnly: true });
+});
+
 route(/^\/pd\/([\w-]+)$/, (p, id) => {
   const s = PD_SONGS.find((x) => x.id === id);
   if (!s) { view.innerHTML = '<p>Nie ma takiej piosenki.</p>'; return; }
@@ -403,6 +472,7 @@ route(/^\/about$/, () => {
     <p>Wyszukiwarka korzysta z otwartej bazy <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a> (tytuły, wykonawcy, albumy).</p>
     <p>Teksty i akordy większości popularnych piosenek są chronione prawem autorskim, dlatego aplikacja ich nie kopiuje. Prowadzi do serwisów, które mają licencje, a własne akordy możesz zapisać na swoim urządzeniu na użytek osobisty.</p>
     <p>Piosenki w zakładce „Domena publiczna” to utwory tradycyjne. Diagramy chwytów generuje sama aplikacja.</p>
+    <p>Akordy bez tekstów pochodzą z bazy <a href="https://huggingface.co/datasets/ailsntua/Chordonomicon" target="_blank" rel="noopener">Chordonomicon</a> (Kantarelis i in., 2024, licencja CC BY-NC 4.0, tylko do użytku niekomercyjnego). Tytuły utworów podaje Spotify.</p>
     <h2>Ustawienia</h2>
     <div class="settings">
       <label>Notacja akordów <select id="notation"><option value="intl">Międzynarodowa (B, Am)</option><option value="pl">Polska (H, a)</option></select></label>
@@ -436,6 +506,7 @@ function songViewer(song, { readOnly }) {
         if (ln.comment !== undefined) return `<div class="cmt">${esc(ln.comment)}</div>`;
         if (ln.tab !== undefined) return `<pre class="tab">${esc(ln.tab)}</pre>`;
         const hasChord = ln.parts.some((p) => p.chord);
+        if (hasChord && ln.parts.every((p) => !p.text.trim())) return `<div class="ln chordsonly">${ln.parts.filter((p) => p.chord).map((p) => `<span class="ch">${esc(tr(p.chord))}</span>`).join('')}</div>`;
         return `<div class="ln${hasChord ? '' : ' nochord'}">${ln.parts.map((p) => `<span class="seg">${hasChord ? `<span class="ch">${p.chord ? esc(tr(p.chord)) : '&nbsp;'}</span>` : ''}<span class="ly">${esc(p.text) || '&nbsp;'}</span></span>`).join('')}</div>`;
       }).join('');
       return `<div class="sec sec-${esc(sec.type)}">${label ? `<div class="sec-label">${esc(label)}</div>` : ''}${lines}</div>`;
@@ -504,7 +575,7 @@ function songViewer(song, { readOnly }) {
 
 // ---------- Pomocnicze ----------
 function copyPd(id) {
-  const pd = PD_SONGS.find((x) => x.id === id);
+  const pd = PD_SONGS.find((x) => x.id === id) || (lastReadOnly?.id === id ? lastReadOnly : null);
   return pd ? { ...pd, id: uid() } : null;
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }

@@ -136,3 +136,5 @@ code { background: var(--chip); padding: 1px 5px; border-radius: 6px; font-size:
 }
 #toast.show { opacity: 1; transform: translateX(-50%); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.list li.pad { padding: 12px 14px; }
+.ln.chordsonly { gap: .9em; margin-bottom: .5em; } .ln.chordsonly .ch { padding: 0; min-width: 2.2em; }

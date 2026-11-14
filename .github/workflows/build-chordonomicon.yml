@@ -1,0 +1,27 @@
+name: Zbuduj bazę akordów (Chordonomicon)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [tools/build_chordonomicon.py, .github/workflows/build-chordonomicon.yml]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pobierz bazę
+        run: curl -sfL -o /tmp/chordonomicon.csv https://huggingface.co/datasets/ailsntua/Chordonomicon/resolve/main/chordonomicon_v2.csv
+      - name: Zbuduj indeks
+        run: |
+          pip -q install pandas
+          python3 tools/build_chordonomicon.py /tmp/chordonomicon.csv
+          du -sh data/cn
+      - name: Zapisz w repozytorium
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/cn
+          git diff --cached --quiet || git commit -q -m "Aktualizacja bazy akordów Chordonomicon (CC BY-NC 4.0)"
+          git push
