@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Akordy i nuty</title>
+  <meta name="description" content="Szukaj akordów i nut po tytule, artyście lub albumie. Graj na gitarze i pianinie.">
+  <meta name="theme-color" content="#1f2a44" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111522" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Akordy">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a href="#/" class="brand"><img src="icon.svg" alt="" width="28" height="28"> Akordy i nuty</a>
+    <a href="#/about" class="settings-link" aria-label="O aplikacji i ustawienia">⚙</a>
+  </header>
+  <main id="view" tabindex="-1"></main>
+  <nav class="tabbar" aria-label="Główna nawigacja">
+    <a href="#/" data-path="/"><span aria-hidden="true">⌕</span>Szukaj</a>
+    <a href="#/lib" data-path="/lib"><span aria-hidden="true">♫</span>Moje</a>
+    <a href="#/pd" data-path="/pd"><span aria-hidden="true">♪</span>Domena publ.</a>
+  </nav>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
