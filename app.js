@@ -251,11 +251,13 @@ route(/^\/lib$/, () => {
     <div class="row"><a class="btn primary" href="#/edit/new">＋ Nowa piosenka</a>
       <button class="btn" id="exp" ${all.length ? '' : 'disabled'}>Kopia zapasowa</button>
       <label class="btn">Wczytaj plik<input type="file" id="imp" accept=".json,.cho,.chordpro,.crd,.pro,.txt" multiple hidden></label></div>
+    ${importHelp()}
     ${all.length ? `<input type="search" id="filter" class="filter" placeholder="Filtruj…" aria-label="Filtruj bibliotekę"><ul class="list" id="libList">${all.map(libItem).join('')}</ul>` : '<p class="muted">Biblioteka jest pusta.</p>'}`;
   $('#filter')?.addEventListener('input', (e) => {
     const f = norm(e.target.value);
     $('#libList').innerHTML = all.filter((s) => norm(s.title + ' ' + s.artist + ' ' + (s.album || '')).includes(f)).map(libItem).join('');
   });
+  bindImportHelp();
   $('#exp')?.addEventListener('click', () => download('moje-akordy.json', JSON.stringify(library.all(), null, 2), 'application/json'));
   $('#imp').addEventListener('change', async (e) => {
     let n = 0;
@@ -272,6 +274,59 @@ route(/^\/lib$/, () => {
     render();
     if (n) alertMsg(`Wczytano piosenki: ${n}.`);
   });
+});
+
+// ---------- Import akordów z innych stron (na użytek osobisty) ----------
+const APP_URL = location.origin + location.pathname;
+const BOOKMARKLET = "javascript:(function(){var s=String(getSelection()).trim();if(!s){var b='';document.querySelectorAll('pre').forEach(function(p){var t=p.innerText;if(t.length>b.length)b=t});s=b.trim()}if(!s){alert('Zaznacz tekst z akordami i kliknij zakładkę jeszcze raz.');return}location.href='"
+  + APP_URL + "#/import?src='+encodeURIComponent(location.href)+'&t='+encodeURIComponent(document.title)+'&text='+encodeURIComponent(s.slice(0,30000))})();";
+
+function importHelp() {
+  return `<details class="help import-help"><summary>Jak dodać akordy z innej strony?</summary>
+    <p>Akordy zapisane w aplikacji są tylko dla Ciebie: zostają na tym urządzeniu i nikt inny ich nie widzi.</p>
+    <ol>
+      <li><strong>Kopiuj i wklej.</strong> Zaznacz akordy z tekstem na dowolnej stronie, skopiuj, potem tu „Nowa piosenka” i „Wklej ze schowka”. Akordy zapisane nad tekstem zamienią się same.</li>
+      <li><strong>Udostępnij (Android).</strong> Po zainstalowaniu apki zaznacz tekst na stronie, wybierz „Udostępnij” i „Akordy”.</li>
+      <li><strong>Zakładka „Do Akordów” (komputer, Android, iPhone).</strong> Na stronie z akordami kliknij zakładkę, a piosenka otworzy się tu gotowa do zapisu. Bierze zaznaczony tekst albo główny blok z akordami.
+        <div class="row"><a class="btn" id="bm" href="#">⤓ Do Akordów</a><button class="btn" id="bmCopy" type="button">Kopiuj kod zakładki</button></div>
+        <p class="muted small">Na komputerze przeciągnij przycisk na pasek zakładek. Na telefonie dodaj dowolną stronę do zakładek, edytuj ją i w miejsce adresu wklej skopiowany kod. Potem na stronie z akordami wpisz w pasku adresu „Do Akordów” (Android) albo wybierz zakładkę (iPhone).</p>
+        <textarea id="bmCode" class="bm-code" rows="3" readonly hidden></textarea>
+      </li>
+    </ol></details>`;
+}
+function bindImportHelp() {
+  const bm = $('#bm');
+  if (!bm) return;
+  bm.setAttribute('href', BOOKMARKLET);
+  bm.addEventListener('click', (e) => { e.preventDefault(); alertMsg('Przeciągnij ten przycisk na pasek zakładek albo skopiuj kod.'); });
+  $('#bmCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(BOOKMARKLET); alertMsg('Skopiowano kod zakładki.'); }
+    catch { const t = $('#bmCode'); t.hidden = false; t.value = BOOKMARKLET; t.select(); }
+  });
+}
+
+// "Dziwny jest ten świat chords by Czesław Niemen @ Ultimate-Guitar.Com" -> tytuł i wykonawca
+function guessMeta(pageTitle) {
+  const t = (pageTitle || '').replace(/\s*[@|·–—]\s*[^@|·–—]*$/, '').replace(/\b(chords?|tabs?|ukulele|akordy|chwyty|tekst piosenki|tekst|tab)\b/gi, '').replace(/\s{2,}/g, ' ').trim();
+  let m = /^(.*)\s+by\s+(.*)$/i.exec(t);
+  if (m) return { title: titleCase(m[1]), artist: m[2].trim() };
+  m = /^(.*?)\s+[-–]\s+(.*)$/.exec(t);
+  if (m) return { artist: m[1].trim(), title: m[2].trim() };
+  return { title: t, artist: '' };
+}
+const titleCase = (s) => (s === s.toUpperCase() ? s.toLowerCase().replace(/^\p{L}/u, (c) => c.toUpperCase()) : s).trim();
+const looksLikeChordPro = (t) => /\[[A-Ha-h][^\]\s]{0,8}\][^\n]/.test(t) || /^\s*\{\w+/m.test(t);
+
+route(/^\/import$/, (p) => {
+  const text = (p.get('text') || '').trim();
+  const src = p.get('src') || p.get('url') || '';
+  const meta = guessMeta(p.get('t') || p.get('title') || '');
+  if (!text) {
+    view.innerHTML = `<h1>Import akordów</h1><p>Nie dostałem tekstu z akordami. Zaznacz na stronie akordy z tekstem i spróbuj jeszcze raz.</p>${src ? `<p class="muted small">Strona: ${esc(src)}</p>` : ''}<a class="btn" href="#/lib">Moje akordy</a>`;
+    return;
+  }
+  const content = looksLikeChordPro(text) ? text : chordsOverLyricsToChordPro(text);
+  location.replace(`#/edit/new?t=${enc(meta.title)}&a=${enc(meta.artist)}&src=${enc(src)}&c=${enc(content)}`);
 });
 
 route(/^\/pd$/, () => {
@@ -295,7 +350,7 @@ route(/^\/lib\/([\w-]+)$/, (p, id) => {
 
 route(/^\/edit\/([\w-]+)$/, (p, id) => {
   const s = id === 'new'
-    ? { id: uid(), title: p.get('t') || '', artist: p.get('a') || '', album: p.get('al') || '', content: '' }
+    ? { id: uid(), title: p.get('t') || '', artist: p.get('a') || '', album: p.get('al') || '', content: p.get('c') || '', src: p.get('src') || '' }
     : (library.get(id) || copyPd(id));
   if (!s) { view.innerHTML = '<p>Nie ma takiej piosenki.</p>'; return; }
   const isNew = !library.get(s.id);
@@ -311,6 +366,7 @@ route(/^\/edit\/([\w-]+)$/, (p, id) => {
         <p>Wstaw akord w nawiasach kwadratowych przed sylabą: <code>[Am]Idzie [F]rak</code>. Sekcje: <code>{soc}</code> … <code>{eoc}</code> dla refrenu, <code>{c: Zwrotka 2}</code> dla komentarza, <code>{capo: 2}</code> dla kapodastra.</p>
         <p>Możesz też wkleić akordy zapisane nad tekstem (jak w większości śpiewników) i kliknąć „Zamień akordy nad tekstem”. Działa notacja polska (H, a-moll jako „a”).</p></details>
       <div class="row">
+        <button type="button" class="btn" id="paste">Wklej ze schowka</button>
         <button type="button" class="btn" id="conv">Zamień akordy nad tekstem</button>
         <button type="submit" class="btn primary">Zapisz</button>
         ${isNew ? '' : '<button type="button" class="btn danger" id="del">Usuń</button>'}
@@ -318,9 +374,23 @@ route(/^\/edit\/([\w-]+)$/, (p, id) => {
     </form>`;
   const f = $('#ed');
   $('#conv').addEventListener('click', () => { f.content.value = chordsOverLyricsToChordPro(f.content.value); });
+  $('#paste').addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) return alertMsg('Schowek jest pusty. Skopiuj najpierw akordy ze strony.');
+      f.content.value = looksLikeChordPro(text) ? text : chordsOverLyricsToChordPro(text);
+    } catch { alertMsg('Przeglądarka nie dała dostępu do schowka. Przytrzymaj pole tekstu i wybierz „Wklej”.'); }
+  });
+  // Wklejenie do pustego pola: od razu zamień „akordy nad tekstem” na format aplikacji.
+  f.content.addEventListener('paste', (e) => {
+    const text = e.clipboardData?.getData('text') || '';
+    if (f.content.value.trim() || !text || looksLikeChordPro(text)) return;
+    e.preventDefault();
+    f.content.value = chordsOverLyricsToChordPro(text);
+  });
   f.addEventListener('submit', (e) => {
     e.preventDefault();
-    library.upsert({ id: s.id, title: f.title.value.trim(), artist: f.artist.value.trim(), album: f.album.value.trim(), content: f.content.value });
+    library.upsert({ id: s.id, title: f.title.value.trim(), artist: f.artist.value.trim(), album: f.album.value.trim(), content: f.content.value, src: s.src || '' });
     location.replace('#/lib/' + s.id);
   });
   $('#del')?.addEventListener('click', () => {
@@ -390,7 +460,7 @@ function songViewer(song, { readOnly }) {
   const { meta } = parseChordPro(song.content);
   view.innerHTML = `
     <a class="back" href="javascript:history.back()">← Wróć</a>
-    <div class="song-head"><div><h1>${esc(meta.title || song.title)}</h1><p class="muted">${esc(meta.artist || song.artist || '')}</p><p class="muted small" id="keyInfo"></p></div>
+    <div class="song-head"><div><h1>${esc(meta.title || song.title)}</h1><p class="muted">${esc(meta.artist || song.artist || '')}</p><p class="muted small" id="keyInfo"></p>${song.src ? `<p class="small"><a href="${esc(song.src)}" target="_blank" rel="noopener noreferrer">Źródło ↗</a></p>` : ''}</div>
       ${readOnly ? `<a class="btn" href="#/edit/${song.id}" title="Zapisz kopię do edycji">Kopiuj</a>` : `<a class="btn" href="#/edit/${song.id}">Edytuj</a>`}</div>
     <div class="toolbar" role="toolbar" aria-label="Sterowanie">
       <div class="grp" aria-label="Transpozycja"><button class="btn" id="tdown" aria-label="Transponuj w dół">−</button><span class="tval" id="tval">0</span><button class="btn" id="tup" aria-label="Transponuj w górę">+</button><button class="btn" id="tb" aria-pressed="false" title="Krzyżyki/bemole">♯/♭</button></div>
@@ -454,5 +524,16 @@ function alertMsg(msg) {
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+// Udostępnianie do aplikacji (Android): ?title=…&text=…&url=…
+{
+  const q = new URLSearchParams(location.search);
+  if (q.has('text') || q.has('url')) {
+    let text = q.get('text') || '';
+    let src = q.get('url') || '';
+    const m = /https?:\/\/\S+\s*$/.exec(text); // Chrome dokleja adres na końcu tekstu
+    if (m && !src) { src = m[0].trim(); text = text.slice(0, m.index); }
+    history.replaceState(null, '', location.pathname + `#/import?t=${enc(q.get('title') || '')}&src=${enc(src)}&text=${enc(text)}`);
+  }
 }
 render();

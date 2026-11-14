@@ -75,17 +75,25 @@ export function chordsIn(text) {
 }
 
 // Zamienia "akordy nad tekstem" (popularny format w internecie) na ChordPro.
+const CHORD_TOKEN = /^\(?[A-Ha-h](#|b|is|es|s)?(m|mi|min|maj|M|dim|aug|sus|add|\+|°|ø|-)?\d{0,2}((sus|add|maj|b|#|\+)\d{1,2})*(\/[A-Ha-h](#|b|is|es)?)?\)?\*?$/;
+const SECTION_LINE = /^\s*(ref(ren)?\.?|zwrotka\s*\d*|chorus|verse\s*\d*|bridge|intro|outro|solo|przej[śs]cie)\s*:?\s*$/i;
+const SECTION = /^\s*(ref(ren)?|zwrotka|chorus|verse|bridge|intro|outro|solo|pre-?chorus|interlude|instrumental|riff|coda|przej[śs]cie)\b/i;
+
 export function chordsOverLyricsToChordPro(text) {
   const lines = text.replace(/\r/g, '').split('\n');
   const isChordLine = (l) => {
     const toks = l.trim().split(/\s+/).filter(Boolean);
     if (!toks.length) return false;
-    return toks.every((t) => /^\(?[A-Ha-h](#|b|is|es)?[a-zA-Z0-9+°ø#b()\-]*(\/[A-Ha-h](#|b)?)?\)?$/.test(t) || /^[|x\-]+$/.test(t));
+    return toks.every((t) => CHORD_TOKEN.test(t) || /^[|x\-/.]+$/.test(t) || /^\(?x\d\)?$/i.test(t));
   };
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    if (isChordLine(l) && i + 1 < lines.length && lines[i + 1].trim() && !isChordLine(lines[i + 1])) {
+    // Nagłówki sekcji, np. [Verse 1], [Chorus], Ref.:, Zwrotka 2
+    const head = /^\s*\[([^\]]+)\]\s*$/.exec(l);
+    if (head && (SECTION.test(head[1]) || !isChordLine(head[1]))) { out.push(`{c: ${head[1].trim()}}`); continue; }
+    if (SECTION_LINE.test(l)) { out.push(`{c: ${l.trim().replace(/:$/, '')}}`); continue; }
+    if (isChordLine(l) && i + 1 < lines.length && lines[i + 1].trim() && !isChordLine(lines[i + 1]) && !SECTION_LINE.test(lines[i + 1]) && !/^\s*\[[^\]]+\]\s*$/.test(lines[i + 1])) {
       const lyric = lines[i + 1];
       const positions = [];
       for (const m of l.matchAll(/\S+/g)) positions.push([m.index, m[0]]);
