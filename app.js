@@ -106,21 +106,21 @@ route(/^\/$/, () => {
       <p class="muted">Znajdź piosenkę po tytule, artyście albo albumie i graj na gitarze lub pianinie.</p>
       ${searchForm()}
     </section>
-    ${favs.length ? `<section><h2>Ulubione</h2><ul class="list">${favs.map((f) => `<li><a href="#/song?t=${enc(f.title)}&a=${enc(f.artist)}&al=${enc(f.album || '')}"><strong>${esc(f.title)}</strong><span class="muted">${esc(f.artist)}</span></a></li>`).join('')}</ul></section>` : ''}
+    ${favs.length ? `<section><h2>Ulubione</h2><ul class="list">${favs.map((f) => `<li><a data-t="${esc(f.title)}" data-a="${esc(f.artist)}" href="#/song?t=${enc(f.title)}&a=${enc(f.artist)}&al=${enc(f.album || '')}"><strong>${esc(f.title)}</strong><span class="muted">${esc(f.artist)}</span></a></li>`).join('')}</ul></section>` : ''}
     <section><h2>Twoje akordy</h2>
       ${lib.length ? `<ul class="list">${lib.map(libItem).join('')}</ul><a class="more" href="#/lib">Cała biblioteka →</a>` : '<p class="muted">Nie masz jeszcze własnych akordów. Znajdź piosenkę i wybierz „Dodaj swoje akordy”, albo <a href="#/edit/new">dodaj od razu</a>.</p>'}
     </section>
-    <section><h2>Na dobry początek</h2><ul class="list">${PD_SONGS.map((s) => `<li><a href="#/pd/${s.id}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)} · domena publiczna</span></a></li>`).join('')}</ul></section>`;
+    <section><h2>Na dobry początek</h2><ul class="list">${PD_SONGS.map((s) => `<li><a data-has="chords" href="#/pd/${s.id}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)} · domena publiczna</span></a></li>`).join('')}</ul></section>`;
   bindSearch();
   $('#searchForm input[name=q]').focus({ preventScroll: true });
 });
 
-const libItem = (s) => `<li><a href="#/lib/${s.id}"><strong>${esc(s.title || 'Bez tytułu')}</strong><span class="muted">${esc(s.artist || '')}</span></a></li>`;
+const libItem = (s) => `<li><a data-has="chords" href="#/lib/${s.id}"><strong>${esc(s.title || 'Bez tytułu')}</strong><span class="muted">${esc(s.artist || '')}</span></a></li>`;
 
 route(/^\/search$/, async (p) => {
   const q = p.get('q') || '';
   const type = p.get('type') || 'all';
-  view.innerHTML = `${searchForm(q, type)}<div id="results" aria-live="polite"><p class="muted loading">Szukam…</p></div>`;
+  view.innerHTML = `${searchForm(q, type)}<p class="legend muted small"><span class="badge">🎸</span> są akordy · <span class="badge">🎼</span> są nuty</p><div id="results" aria-live="polite"><p class="muted loading">Szukam…</p></div>`;
   bindSearch();
   const out = $('#results');
   try {
@@ -156,7 +156,7 @@ function recordingList(recs, q) {
     items.push({ title: r.title, artist, album: rel?.title || '', aid: r['artist-credit']?.[0]?.artist?.id || '' });
   }
   if (!items.length) return noResults(q);
-  return `<ul class="list">${items.map((s) => `<li><a href="#/song?t=${enc(s.title)}&a=${enc(s.artist)}&al=${enc(s.album)}&aid=${enc(s.aid)}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)}${s.album ? ' · ' + esc(s.album) : ''}</span></a></li>`).join('')}</ul>`;
+  return `<ul class="list">${items.map((s) => `<li><a data-t="${esc(s.title)}" data-a="${esc(s.artist)}" href="#/song?t=${enc(s.title)}&a=${enc(s.artist)}&al=${enc(s.album)}&aid=${enc(s.aid)}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)}${s.album ? ' · ' + esc(s.album) : ''}</span></a></li>`).join('')}</ul>`;
 }
 
 route(/^\/artist\/([\w-]+)$/, async (p, id) => {
@@ -191,7 +191,7 @@ route(/^\/album\/([\w-]+)$/, async (p, id) => {
       <ol class="list tracks">${tracks.map((t) => {
         const a = credit(t['artist-credit']) || artist;
         const aid = t['artist-credit']?.[0]?.artist?.id || rel['artist-credit']?.[0]?.artist?.id || '';
-        return `<li><a href="#/song?t=${enc(t.title)}&a=${enc(a)}&al=${enc(rel.title)}&aid=${enc(aid)}"><strong>${esc(t.title)}</strong>${a !== artist ? `<span class="muted">${esc(a)}</span>` : ''}</a></li>`;
+        return `<li><a data-t="${esc(t.title)}" data-a="${esc(a)}" href="#/song?t=${enc(t.title)}&a=${enc(a)}&al=${enc(rel.title)}&aid=${enc(aid)}"><strong>${esc(t.title)}</strong>${a !== artist ? `<span class="muted">${esc(a)}</span>` : ''}</a></li>`;
       }).join('')}</ol>`;
   } catch (e) { $('#album').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
 });
@@ -371,7 +371,7 @@ route(/^\/browse$/, async (p) => {
     const data = await getJSON('data/browse/titles.json');
     if (!data) { box.innerHTML = '<p class="muted">Katalog tytułów jeszcze się buduje. Zajrzyj później.</p>'; return; }
     rows = Object.entries(data).filter(([, v]) => letterOf(v[0]) === l)
-      .map(([sid, [title, artist, mbid, aid]]) => ({ key: title + ' ' + artist, title, html: `<li><a href="#/cn/${aid}/${sid}?t=${enc(title)}&a=${enc(artist)}"><strong>${esc(title)}</strong><span class="muted">${esc(artist)}</span></a></li>` }))
+      .map(([sid, [title, artist, mbid, aid]]) => ({ key: title + ' ' + artist, title, html: `<li><a data-has="chords" href="#/cn/${aid}/${sid}?t=${enc(title)}&a=${enc(artist)}"><strong>${esc(title)}</strong><span class="muted">${esc(artist)}</span></a></li>` }))
       .sort((a, b) => a.title.localeCompare(b.title, 'pl'));
   }
   const draw = (f = '') => {
@@ -388,7 +388,7 @@ route(/^\/browse$/, async (p) => {
 route(/^\/pd$/, () => {
   view.innerHTML = `<h1>Domena publiczna</h1>
     <p class="muted">Utwory, z których można korzystać bez ograniczeń, oraz legalne biblioteki nut.</p>
-    <section><h2>Śpiewnik w aplikacji</h2><ul class="list">${PD_SONGS.map((s) => `<li><a href="#/pd/${s.id}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)}</span></a></li>`).join('')}</ul></section>
+    <section><h2>Śpiewnik w aplikacji</h2><ul class="list">${PD_SONGS.map((s) => `<li><a data-has="chords" href="#/pd/${s.id}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)}</span></a></li>`).join('')}</ul></section>
     <section><h2>Biblioteki nut</h2>${linkList(PD_SOURCES.map((s) => ({ name: s.name, desc: s.desc, url: s.url })))}</section>`;
 });
 
@@ -416,7 +416,7 @@ async function cnSongMatch(aid, title, artist) {
     });
     if (!box.isConnected) return;
     if (found) {
-      box.innerHTML = `<ul class="list"><li><a href="${cnLink(spotify, { ...found, title }, artist)}"><strong>${esc(found.title)}</strong><span class="muted">akordy bez tekstu · Chordonomicon</span></a></li></ul>`;
+      box.innerHTML = `<ul class="list"><li><a data-has="chords" href="${cnLink(spotify, { ...found, title }, artist)}"><strong>${esc(found.title)}</strong><span class="muted">akordy bez tekstu · Chordonomicon</span></a></li></ul>`;
     } else {
       box.innerHTML = `<p class="muted">Tej piosenki nie ma w bazie, ale są inne utwory tego wykonawcy (${songs.length}).</p><a class="btn" href="#/artist/${aid}?n=${enc(artist)}">Zobacz piosenki z akordami</a>`;
     }
@@ -436,7 +436,7 @@ async function cnArtistList(aid, name) {
       const ready = songs.filter((s) => s.title).sort((a, b) => a.title.localeCompare(b.title, 'pl'));
       const seen = new Set();
       list.innerHTML = ready.filter((s) => { const k = baseTitle(s.title, norm); if (seen.has(k)) return false; seen.add(k); return true; })
-        .map((s) => `<li><a href="${cnLink(spotify, s, name)}"><strong>${esc(s.title)}</strong>${s.year ? `<span class="muted">${s.year}</span>` : ''}</a></li>`).join('')
+        .map((s) => `<li><a data-has="chords" href="${cnLink(spotify, s, name)}"><strong>${esc(s.title)}</strong>${s.year ? `<span class="muted">${s.year}</span>` : ''}</a></li>`).join('')
         + (ready.length < songs.length ? '<li class="muted small pad">Wczytuję tytuły…</li>' : '');
       return false;
     };
@@ -661,4 +661,50 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
     history.replaceState(null, '', location.pathname + `#/import?t=${enc(q.get('title') || '')}&src=${enc(src)}&text=${enc(text)}`);
   }
 }
+// ---------- Oznaczenia: przy których piosenkach są akordy (🎸) lub nuty (🎼) ----------
+const songKey = (t, a) => baseTitle(t, norm) + '|' + norm(a);
+let titlesIdx = null;
+const getTitlesIdx = () => titlesIdx || (titlesIdx = getJSON('data/browse/titles.json').then((d) => new Set(Object.values(d || {}).map((v) => songKey(v[0], v[1])))));
+async function spotifyByName(name) {
+  const rows = await getJSON(`data/browse/artists-${letterOf(name)}.json`);
+  return (rows || []).find((r) => norm(r[1]) === norm(name))?.[0] || null;
+}
+function badge(a, kind) {
+  if (!a.isConnected || a.querySelector('.badge-' + kind)) return;
+  a.classList.add('has-' + kind);
+  const label = kind === 'chords' ? 'Są akordy' : 'Są nuty';
+  a.querySelector('strong')?.insertAdjacentHTML('beforeend', ` <span class="badge badge-${kind}" title="${label}" aria-label="${label}">${kind === 'chords' ? '🎸' : '🎼'}</span>`);
+}
+async function markSongs(root) {
+  const links = [...root.querySelectorAll('a[data-has]:not([data-marked]), a[data-t]:not([data-marked])')];
+  if (!links.length) return;
+  links.forEach((a) => { a.dataset.marked = '1'; });
+  const lib = library.all();
+  const idx = await getTitlesIdx();
+  const pending = new Map();
+  for (const a of links) {
+    if (a.dataset.has) { a.dataset.has.split(' ').forEach((k) => badge(a, k)); continue; }
+    const t = a.dataset.t, ar = a.dataset.a || '', bt = baseTitle(t, norm);
+    const mine = lib.some((s) => baseTitle(s.title, norm) === bt && (!s.artist || !ar || norm(s.artist) === norm(ar)))
+      || PD_SONGS.some((s) => baseTitle(s.title, norm) === bt);
+    if (mine || idx.has(songKey(t, ar))) badge(a, 'chords');
+    else if (ar) { const k = norm(ar); if (!pending.has(k)) pending.set(k, { name: ar, links: [] }); pending.get(k).links.push(a); }
+  }
+  // Pozostałe: sprawdź w bazie akordów wykonawcy (najwyżej 6 wykonawców naraz).
+  for (const { name, links: ls } of [...pending.values()].slice(0, 6)) {
+    if (!ls.some((a) => a.isConnected)) continue;
+    const spotify = await spotifyByName(name).catch(() => null);
+    if (!spotify) continue;
+    const songs = (await artistSongs(spotify)).slice(0, 150);
+    const want = new Map(ls.map((a) => [baseTitle(a.dataset.t, norm), a]));
+    await resolveTitles(songs, (song) => {
+      const a = want.get(baseTitle(song.title, norm));
+      if (a) { badge(a, 'chords'); want.delete(baseTitle(song.title, norm)); }
+      return !want.size || !ls.some((x) => x.isConnected);
+    });
+  }
+}
+let markTimer = 0;
+new MutationObserver(() => { clearTimeout(markTimer); markTimer = setTimeout(() => markSongs(view), 150); }).observe(view, { childList: true, subtree: true });
+
 render();

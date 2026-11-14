@@ -143,3 +143,6 @@ code { background: var(--chip); padding: 1px 5px; border-radius: 6px; font-size:
 .letters a.on { background: var(--accent); color: var(--accent-ink); }
 .chiplink { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--chip); font-size: .9rem; text-decoration: none; }
 .chiplink.on { background: var(--text); color: var(--bg); }
+.badge { font-size: .85em; margin-left: 4px; }
+.list a.has-chords, .list a.has-notes { box-shadow: inset 4px 0 0 var(--accent); }
+.legend { margin: 4px 0 8px; }
