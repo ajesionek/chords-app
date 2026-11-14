@@ -1,0 +1,31 @@
+name: Zbuduj katalog A–Z (wykonawcy i tytuły)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [tools/build_artists.py, tools/build_titles.py, .github/workflows/build-browse.yml]
+permissions:
+  contents: write
+concurrency: browse
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wykonawcy z MusicBrainz
+        run: |
+          D=$(curl -sf https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/LATEST | tr -d '[:space:]')
+          curl -sfL "https://data.metabrainz.org/pub/musicbrainz/data/json-dumps/$D/artist.tar.xz" | xz -dc | tar -xO mbdump/artist | python3 tools/build_artists.py
+          du -sh data/browse
+      - name: Zapisz wykonawców
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/browse && (git diff --cached --quiet || git commit -q -m "Katalog wykonawców A–Z (MusicBrainz, CC0)") && git push
+      - name: Tytuły polskich piosenek z MusicBrainz
+        run: python3 tools/build_titles.py 17000
+      - name: Zapisz tytuły
+        if: always()
+        run: |
+          git add data/browse && (git diff --cached --quiet || git commit -q -m "Katalog tytułów A–Z (MusicBrainz, CC0)") && git pull -q --rebase && git push
