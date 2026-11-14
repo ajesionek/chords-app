@@ -358,6 +358,7 @@ route(/^\/browse$/, async (p) => {
       <a class="chiplink${by === 'titles' ? ' on' : ''}" href="${link({ by: 'titles' })}">Tytuły</a>
       <a class="chiplink${pl ? ' on' : ''}" href="${link({ pl: pl ? '0' : '1' })}" aria-pressed="${pl}">Tylko polskie</a>
     </div>
+    ${by === 'titles' ? '<p class="muted small">Tytuły: polskie piosenki z bazy akordów. Zagraniczne znajdziesz przez wykonawców.</p>' : ''}
     <nav class="letters" aria-label="Litera">${LETTERS.map((x) => `<a href="${link({ l: x })}" class="${x === l ? 'on' : ''}">${x}</a>`).join('')}</nav>
     <input type="search" id="bfilter" class="filter" placeholder="Filtruj na tej liście…" aria-label="Filtruj">
     <div id="blist"><p class="muted loading">Ładuję</p></div>`;
@@ -368,10 +369,22 @@ route(/^\/browse$/, async (p) => {
     if (!data) { box.innerHTML = '<p class="muted">Katalog wykonawców jeszcze się buduje. Zajrzyj za kilka minut.</p>'; return; }
     rows = data.filter((r) => !pl || r[3]).map(([, name, mbid, , n]) => ({ key: name, html: `<li><a href="#/artist/${mbid}?n=${enc(name)}"><strong>${esc(name)}</strong><span class="muted">${n} ${n === 1 ? 'piosenka' : n < 5 ? 'piosenki' : 'piosenek'} z akordami</span></a></li>` }));
   } else {
-    const data = await getJSON('data/browse/titles.json');
-    if (!data) { box.innerHTML = '<p class="muted">Katalog tytułów jeszcze się buduje. Zajrzyj później.</p>'; return; }
-    rows = Object.entries(data).filter(([, v]) => letterOf(v[0]) === l)
-      .map(([sid, [title, artist, mbid, aid]]) => ({ key: title + ' ' + artist, title, html: `<li><a data-has="chords" href="#/cn/${aid}/${sid}?t=${enc(title)}&a=${enc(artist)}"><strong>${esc(title)}</strong><span class="muted">${esc(artist)}</span></a></li>` }))
+    // Tytuły polskich piosenek: nazwy pobierane na bieżąco (Spotify) i zapamiętywane na urządzeniu.
+    const artists = await getJSON('data/browse/polish-artists.json');
+    if (!artists) { box.innerHTML = '<p class="muted">Katalog jeszcze się buduje. Zajrzyj później.</p>'; return; }
+    const all = [];
+    for (const [aid, name, , n] of artists) for (const s of await artistSongs(aid)) all.push({ ...s, aid, artist: name });
+    const known = () => all.filter((s) => s.title);
+    if (known().length < all.length) {
+      box.innerHTML = `<p class="muted">Wczytuję tytuły polskich piosenek: <span id="tprog">0</span> z ${all.length}. Za pierwszym razem to chwila, potem lista będzie od razu.</p>`;
+      let k = 0;
+      await resolveTitles(all, () => { const el = $('#tprog'); if (!el) return true; el.textContent = ++k; return false; }, 8);
+      if (!box.isConnected) return;
+    }
+    const seenT = new Set();
+    rows = known().filter((s) => letterOf(s.title) === l)
+      .filter((s) => { const k = songKey(s.title, s.artist); if (seenT.has(k)) return false; seenT.add(k); return true; })
+      .map((s) => ({ key: s.title + ' ' + s.artist, title: s.title, html: `<li><a data-has="chords" href="${cnLink(s.aid, s, s.artist)}"><strong>${esc(s.title)}</strong><span class="muted">${esc(s.artist)}</span></a></li>` }))
       .sort((a, b) => a.title.localeCompare(b.title, 'pl'));
   }
   const draw = (f = '') => {
@@ -379,7 +392,7 @@ route(/^\/browse$/, async (p) => {
     const shown = rows.filter((r) => !nf || norm(r.key).includes(nf));
     box.innerHTML = shown.length
       ? `<p class="muted small">${shown.length} na liście</p><ul class="list">${shown.slice(0, 400).map((r) => r.html).join('')}</ul>${shown.length > 400 ? '<p class="muted small">Pokazuję pierwsze 400. Zawęź filtrem.</p>' : ''}`
-      : `<p class="muted">Brak pozycji${pl ? ' polskich' : ''} na literę ${l}.</p>`;
+      : `<p class="muted">Brak pozycji${pl || by === 'titles' ? ' polskich' : ''} na literę ${l}.</p>`;
   };
   draw();
   $('#bfilter').addEventListener('input', (e) => draw(e.target.value));

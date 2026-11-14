@@ -37,5 +37,7 @@ coll = lambda r: unicodedata.normalize('NFD', re.sub(r'^the\s+', '', r[1], flags
 for k, rows in out.items():
     rows.sort(key=coll)
     json.dump(rows, open(f'data/browse/artists-{k}.json', 'w'), ensure_ascii=False, separators=(',', ':'))
+polish = [[r[0], r[1], r[2], r[4]] for k in sorted(out) for r in out[k] if r[3]]
+json.dump(polish, open('data/browse/polish-artists.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 total = sum(len(v) for v in out.values())
 print('artists matched', total, 'of', len(counts), 'polish', sum(r[3] for v in out.values() for r in v))
