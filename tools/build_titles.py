@@ -2,7 +2,7 @@
 
 Dla każdej piosenki z bazy sprawdza w API MusicBrainz, czy link Spotify do utworu
 jest powiązany z nagraniem, i zapisuje tytuł. Wyniki są dopisywane do
-data/browse/titles.json ({spotify_song_id: [tytuł, spotify_artist_id]}), więc kolejne
+data/browse/titles.json ({spotify_song_id: [tytuł, wykonawca, mbid, spotify_artist_id]}), więc kolejne
 uruchomienia kontynuują pracę. Limit API: 1 zapytanie na sekundę.
 """
 import json, os, sys, time, urllib.parse, urllib.request
@@ -52,7 +52,7 @@ for sid_artist, name, mbid, pl, n in artists:
             continue
         t = lookup(sid)
         if t:
-            titles[sid] = [t, sid_artist]
+            titles[sid] = [t, name, mbid, sid_artist]
         else:
             missing.add(sid)
         done += 1

@@ -335,6 +335,56 @@ route(/^\/import$/, (p) => {
   location.replace(`#/edit/new?t=${enc(meta.title)}&a=${enc(meta.artist)}&src=${enc(src)}&c=${enc(content)}`);
 });
 
+// ---------- Przeglądanie bazy A–Z ----------
+const LETTERS = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
+const browseCache = new Map();
+const getJSON = (url) => {
+  if (!browseCache.has(url)) browseCache.set(url, fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null));
+  return browseCache.get(url);
+};
+const letterOf = (name) => {
+  const n = norm(name).replace(/^the /, '');
+  return n && n[0] >= 'a' && n[0] <= 'z' ? n[0].toUpperCase() : '#';
+};
+
+route(/^\/browse$/, async (p) => {
+  const by = p.get('by') === 'titles' ? 'titles' : 'artists';
+  const l = LETTERS.includes(p.get('l')) ? p.get('l') : 'A';
+  const pl = p.get('pl') === '1';
+  const link = (o) => '#/browse?' + new URLSearchParams({ by, l, pl: pl ? '1' : '0', ...o });
+  view.innerHTML = `<h1>Przeglądaj</h1>
+    <div class="chips" aria-label="Przeglądaj według">
+      <a class="chiplink${by === 'artists' ? ' on' : ''}" href="${link({ by: 'artists' })}">Wykonawcy</a>
+      <a class="chiplink${by === 'titles' ? ' on' : ''}" href="${link({ by: 'titles' })}">Tytuły</a>
+      <a class="chiplink${pl ? ' on' : ''}" href="${link({ pl: pl ? '0' : '1' })}" aria-pressed="${pl}">Tylko polskie</a>
+    </div>
+    <nav class="letters" aria-label="Litera">${LETTERS.map((x) => `<a href="${link({ l: x })}" class="${x === l ? 'on' : ''}">${x}</a>`).join('')}</nav>
+    <input type="search" id="bfilter" class="filter" placeholder="Filtruj na tej liście…" aria-label="Filtruj">
+    <div id="blist"><p class="muted loading">Ładuję</p></div>`;
+  const box = $('#blist');
+  let rows = [];
+  if (by === 'artists') {
+    const data = await getJSON(`data/browse/artists-${l}.json`);
+    if (!data) { box.innerHTML = '<p class="muted">Katalog wykonawców jeszcze się buduje. Zajrzyj za kilka minut.</p>'; return; }
+    rows = data.filter((r) => !pl || r[3]).map(([, name, mbid, , n]) => ({ key: name, html: `<li><a href="#/artist/${mbid}?n=${enc(name)}"><strong>${esc(name)}</strong><span class="muted">${n} ${n === 1 ? 'piosenka' : n < 5 ? 'piosenki' : 'piosenek'} z akordami</span></a></li>` }));
+  } else {
+    const data = await getJSON('data/browse/titles.json');
+    if (!data) { box.innerHTML = '<p class="muted">Katalog tytułów jeszcze się buduje. Zajrzyj później.</p>'; return; }
+    rows = Object.entries(data).filter(([, v]) => letterOf(v[0]) === l)
+      .map(([sid, [title, artist, mbid, aid]]) => ({ key: title + ' ' + artist, title, html: `<li><a href="#/cn/${aid}/${sid}?t=${enc(title)}&a=${enc(artist)}"><strong>${esc(title)}</strong><span class="muted">${esc(artist)}</span></a></li>` }))
+      .sort((a, b) => a.title.localeCompare(b.title, 'pl'));
+  }
+  const draw = (f = '') => {
+    const nf = norm(f);
+    const shown = rows.filter((r) => !nf || norm(r.key).includes(nf));
+    box.innerHTML = shown.length
+      ? `<p class="muted small">${shown.length} na liście</p><ul class="list">${shown.slice(0, 400).map((r) => r.html).join('')}</ul>${shown.length > 400 ? '<p class="muted small">Pokazuję pierwsze 400. Zawęź filtrem.</p>' : ''}`
+      : `<p class="muted">Brak pozycji${pl ? ' polskich' : ''} na literę ${l}.</p>`;
+  };
+  draw();
+  $('#bfilter').addEventListener('input', (e) => draw(e.target.value));
+});
+
 route(/^\/pd$/, () => {
   view.innerHTML = `<h1>Domena publiczna</h1>
     <p class="muted">Utwory, z których można korzystać bez ograniczeń, oraz legalne biblioteki nut.</p>
