@@ -1,5 +1,5 @@
 // Service worker: aplikacja działa offline (wyszukiwarka wymaga internetu).
-const CACHE = 'akordy-v3';
+const CACHE = 'akordy-v4';
 const SHELL = ['./', './index.html', './style.css', './app.js', './chords.js', './chordpro.js', './songs-pd.js', './cn.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -13,7 +13,7 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // Najpierw sieć (świeża wersja), a bez internetu kopia z pamięci.
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' }) // zawsze sprawdź, czy jest nowsza wersja
       .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res; })
       .catch(() => caches.match(e.request).then((r) => r || caches.match('./index.html')))
   );

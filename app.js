@@ -594,7 +594,11 @@ function alertMsg(msg) {
 }
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});
+  // Po instalacji nowej wersji przeładuj stronę raz, żeby od razu działał nowy kod.
+  let reloaded = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
 }
 // Udostępnianie do aplikacji (Android): ?title=…&text=…&url=…
 {
