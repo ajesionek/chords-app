@@ -1,0 +1,23 @@
+name: Sprawdź bazę Chordonomicon
+on:
+  push:
+    branches: [explore/chordonomicon]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lista plików
+        run: curl -s https://huggingface.co/api/datasets/ailsntua/Chordonomicon | python3 -c "import json,sys;d=json.load(sys.stdin);[print(s['rfilename']) for s in d['siblings']]"
+      - name: Pobierz i opisz
+        run: |
+          pip -q install pandas
+          curl -sL -o chordonomicon.csv https://huggingface.co/datasets/ailsntua/Chordonomicon/resolve/main/chordonomicon_v2.csv || true
+          ls -la
+          python3 - <<'PY'
+          import pandas as pd, glob
+          f = glob.glob('*.csv')[0]
+          df = pd.read_csv(f, nrows=200000, low_memory=False)
+          print(df.columns.tolist()); print(df.head(5).to_string()[:3000])
+          for c in df.columns:
+              if df[c].dtype == object and df[c].nunique() < 60: print(c, df[c].value_counts().head(30).to_dict())
+          PY
